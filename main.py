@@ -2,12 +2,14 @@ import streamlit as st
 import google.generativeai as genai
 from google import genai as genai_new  # New API for grounding
 import openai
+import os
 from google.genai.types import (
     GenerateContentConfig,
     GoogleSearch,
     HttpOptions,
     Tool,
 )
+BACKGROUND_INFO_FILE_PATH = os.path.join(os.path.dirname(__file__), "background.txt")
 
 # --- Configuration ---
 # Load credentials from Streamlit secrets
@@ -184,9 +186,36 @@ def get_llm_response(chat_history, model_name):
     else:
         st.error(f"Unknown model provider for: {model_name}")
         return None
+ADDITIONAL_LLMS ="""
+https://www.s2-ai.com/chat
+https://www.phind.com/
+https://t3.chat/
+https://lmarena.ai/?mode=direct
+https://grok.com/?referrer=website
+
+"""
+def show_background_info_page():
+    st.title("Background Information")
+    st.markdown(background_info_content)
+    # Add a button to go back to the chat
+    if st.sidebar.button("← Back to Chat"):
+        st.session_state.page = "chat"
+        st.rerun()
+    st.sidebar.markdown("---") # Separator
+    with st.sidebar.expander("Additional LLMs"):
+        st.markdown(ADDITIONAL_LLMS)
+
 
 # --- Main Application ---
-def main_app():
+try:
+    with open(BACKGROUND_INFO_FILE_PATH, "r", encoding="utf-8") as f:
+        background_info_content = f.read()
+except FileNotFoundError:
+    background_info_content = "Error: background.txt not found!"
+except Exception as e:
+    background_info_content = f"Error reading background.txt: {e}"
+
+def  main_chat_app():
     """Main application logic after authentication."""
     st.sidebar.success(f"Logged in as: {st.session_state['username']}")
     show_logout_button()
@@ -195,8 +224,24 @@ def main_app():
     st.session_state.selected_model = st.sidebar.selectbox(
         "Choose an LLM Model:",
         FLAT_AVAILABLE_MODELS,
-        index=FLAT_AVAILABLE_MODELS.index(st.session_state.get("selected_model", FLAT_AVAILABLE_MODELS[0]))
+        index=FLAT_AVAILABLE_MODELS.index(st.session_state.get("selected_model", FLAT_AVAILABLE_MODELS[1]))
     )
+    st.sidebar.markdown("---") # Separator
+
+    # Button to switch to Background Info page
+    if st.sidebar.button("Background Info"):
+        st.session_state.page = "background_info"
+        st.rerun()
+
+    # Button to go back to Chat (only if not already on chat page)
+    if st.session_state.page != "chat" and st.sidebar.button("Back to Chat"):
+        st.session_state.page = "chat"
+        st.rerun()
+    st.sidebar.markdown("---") # Separator
+    with st.sidebar.expander("Additional LLMs"):
+        st.markdown(ADDITIONAL_LLMS)
+
+    st.sidebar.markdown("---") # Separator
 
     st.title("GOOOOOGLE")
     st.write(f"Using model: `{st.session_state.selected_model}`")
@@ -253,29 +298,30 @@ if __name__ == "__main__":
     if "authenticated" not in st.session_state:
         st.session_state["authenticated"] = False
     if "selected_model" not in st.session_state:
-        st.session_state["selected_model"] = FLAT_AVAILABLE_MODELS[0]
+        st.session_state["selected_model"] = FLAT_AVAILABLE_MODELS[1]   
     if "messages" not in st.session_state:
         st.session_state.messages = []
+    if "page" not in st.session_state: # New: Default page is chat
+        st.session_state["page"] = "chat"
 
+        st.markdown("---") # Separator
     # Check if essential app credentials are in secrets before showing login
     app_creds_configured = "APP_USERNAME" in st.secrets and "APP_PASSWORD" in st.secrets
 
     if st.session_state["authenticated"]:
-        main_app()
+        # Only show the page if authenticated
+        if st.session_state["page"] == "chat":
+            main_chat_app() # Render the chat application
+        elif st.session_state["page"] == "background_info":
+            show_background_info_page() # Render the background info page
     else:
+        # User is not authenticated - always show login or error, and reset page to 'chat'
+        st.session_state["page"] = "chat" # Force page back to chat/login view if not authenticated
         if app_creds_configured:
             show_login_form()
             st.info("Please log in using the credentials from your secrets.toml file.")
         else:
-            # This block handles the case where app credentials are not set in secrets
-            st.sidebar.title("Login") # Keep title for consistency
+            st.sidebar.title("Login")
             st.sidebar.error("Critical: App credentials (APP_USERNAME, APP_PASSWORD) are not set in .streamlit/secrets.toml.")
             st.error("Application login is disabled because credentials are not configured in secrets. Please contact the administrator.")
-
-        # Display API key warnings regardless of login state if they are missing
-        # These warnings are useful even if login is disabled, to inform about other potential issues.
-        if not GEMINI_API_CONFIGURED:
-            st.sidebar.warning("Google API Key missing in secrets.")
-        if not OPENAI_API_CONFIGURED:
-            st.sidebar.warning("OpenAI API Key missing in secrets.")
 
