@@ -243,7 +243,7 @@ def  main_chat_app():
 
     st.sidebar.markdown("---") # Separator
 
-    st.title("GOOOOOGLE")
+    st.title("HWG Rechtwebsite")
     st.write(f"Using model: `{st.session_state.selected_model}`")
 
     selected_is_gemini = st.session_state.selected_model in AVAILABLE_MODELS["Google Gemini"]
