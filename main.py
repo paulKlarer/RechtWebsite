@@ -1,6 +1,13 @@
 import streamlit as st
 import google.generativeai as genai
+from google import genai as genai_new  # New API for grounding
 import openai
+from google.genai.types import (
+    GenerateContentConfig,
+    GoogleSearch,
+    HttpOptions,
+    Tool,
+)
 
 # --- Configuration ---
 # Load credentials from Streamlit secrets
@@ -120,13 +127,39 @@ def get_llm_response(chat_history, model_name):
             st.error("Google API Key not configured for Gemini models.")
             return None
         try:
-            gemini_history = []
-            for msg in chat_history:
-                role = "model" if msg["role"] == "assistant" else msg["role"]
-                gemini_history.append({"role": role, "parts": [{"text": msg["content"]}]})
+            # Check if this is the grounding-enabled model
+            if model_name == "gemini-2.5-flash-preview-05-20":
+                # Use new API with Google Search grounding
+                client = genai_new.Client(
+                    api_key=st.secrets.get("GOOGLE_API_KEY"),
+                    http_options=HttpOptions(api_version="v1alpha")  # Try v1alpha instead of v1
+                )
+                
+                # Convert chat history to simple string format for new API
+                if chat_history:
+                    last_message = chat_history[-1]["content"] if chat_history else ""
+                else:
+                    last_message = ""
+                
+                # Try different configuration structure
+                response = client.models.generate_content(
+                    model=model_name,
+                    contents=last_message,
+                    config=GenerateContentConfig(
+                        tools=[Tool(google_search=GoogleSearch())],
+                        response_modalities=["TEXT"]  # Explicitly specify text response
+                    ),
+                )
+            else:
+                # Use old API for other Gemini models
+                gemini_history = []
+                for msg in chat_history:
+                    role = "model" if msg["role"] == "assistant" else msg["role"]
+                    gemini_history.append({"role": role, "parts": [{"text": msg["content"]}]})
+                
+                model = genai.GenerativeModel(model_name)
+                response = model.generate_content(gemini_history)
             
-            model = genai.GenerativeModel(model_name)
-            response = model.generate_content(gemini_history)
             return response.text
         except Exception as e:
             st.error(f"Error with Google Gemini API ({model_name}): {e}")
